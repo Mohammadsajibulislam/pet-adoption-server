@@ -15,12 +15,18 @@ const uri = process.env.MONGODB_URI;
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "https://pet-adoption-client-seven.vercel.app",
-      "https://pet-adoption-client-iwg208hk6.vercel.app",
-      /https:\/\/pet-adoption-client.*\.vercel\.app$/,
-    ],
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        "http://localhost:3000",
+        "https://pet-adoption-client-seven.vercel.app",
+      ];
+      
+      if (!origin || allowedOrigins.includes(origin) || /https:\/\/pet-adoption-client.*\.vercel\.app$/.test(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
@@ -294,10 +300,16 @@ async function run() {
 
 run().catch(console.dir);
 
+app.use((err, req, res, next) => {
+  console.error("Server error:", err);
+  res.status(500).json({ message: err.message || "Internal Server Error" });
+});
+
 app.get("/", (req, res) => {
   res.send("Pet Adoption Server is running!");
 });
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`CORS allowed origins: all pet-adoption-client Vercel URLs`);
 });
