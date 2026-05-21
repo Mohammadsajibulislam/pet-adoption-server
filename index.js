@@ -15,7 +15,10 @@ const uri = process.env.MONGODB_URI;
 
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: [
+      "http://localhost:3000",
+      "https://pet-adoption-client-seven.vercel.app",
+    ],
     credentials: true,
   })
 );
@@ -130,12 +133,30 @@ async function run() {
     app.post("/pets", verifyToken, async (req, res) => {
       try {
         const petData = req.body;
+        
+        // Validate required fields
+        const requiredFields = ["name", "species", "breed", "age", "gender", "imageUrl", "healthStatus", "vaccinationStatus", "location", "adoptionFee", "description", "ownerEmail"];
+        const missingFields = requiredFields.filter(field => !petData[field]);
+        
+        if (missingFields.length > 0) {
+          return res.status(400).json({ message: `Missing fields: ${missingFields.join(", ")}` });
+        }
+
         petData.status = "available";
         petData.createdAt = new Date();
         const result = await petsCollection.insertOne(petData);
-        res.json(result);
+        
+        if (result.insertedId) {
+          return res.json({ 
+            acknowledged: result.acknowledged,
+            insertedId: result.insertedId
+          });
+        } else {
+          return res.status(500).json({ message: "Failed to insert pet" });
+        }
       } catch (error) {
-        res.status(500).json({ message: "Server error" });
+        console.error("Error adding pet:", error);
+        res.status(500).json({ message: error.message || "Server error" });
       }
     });
 
