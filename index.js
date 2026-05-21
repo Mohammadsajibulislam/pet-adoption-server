@@ -2,7 +2,6 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 
 dotenv.config();
 
@@ -33,38 +32,20 @@ const db = client.db("petAdoption");
 const petsCollection = db.collection("pets");
 const requestsCollection = db.collection("requests");
 
-client.connect().then(() => {
-  console.log("Connected to MongoDB!");
-}).catch((err) => {
-  console.error("MongoDB connection error:", err);
-});
-
-const JWKS = createRemoteJWKSet(
-  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
-);
-
-const verifyToken = async (req, res, next) => {
-  const authHeader = req?.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  try {
-    const { payload } = await jwtVerify(token, JWKS);
-    req.user = payload;
-    next();
-  } catch (error) {
-    return res.status(403).json({ message: "Forbidden" });
-  }
-};
+client
+  .connect()
+  .then(() => {
+    console.log("Connected to MongoDB!");
+  })
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+  });
 
 // ──────────────────────────────────────
 // PETS ROUTES
 // ──────────────────────────────────────
 
+// GET all pets (search & filter)
 app.get("/pets", async (req, res) => {
   try {
     const { search, species } = req.query;
@@ -82,6 +63,7 @@ app.get("/pets", async (req, res) => {
   }
 });
 
+// GET featured pets
 app.get("/pets/featured", async (req, res) => {
   try {
     const result = await petsCollection.find().limit(6).toArray();
@@ -91,6 +73,7 @@ app.get("/pets/featured", async (req, res) => {
   }
 });
 
+// GET pets by owner email
 app.get("/pets/owner/:email", async (req, res) => {
   try {
     const { email } = req.params;
@@ -103,6 +86,7 @@ app.get("/pets/owner/:email", async (req, res) => {
   }
 });
 
+// GET single pet
 app.get("/pets/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -116,7 +100,8 @@ app.get("/pets/:id", async (req, res) => {
   }
 });
 
-app.post("/pets", verifyToken, async (req, res) => {
+// POST add pet
+app.post("/pets", async (req, res) => {
   try {
     const petData = req.body;
     petData.status = "available";
@@ -128,7 +113,8 @@ app.post("/pets", verifyToken, async (req, res) => {
   }
 });
 
-app.patch("/pets/:id", verifyToken, async (req, res) => {
+// PATCH update pet
+app.patch("/pets/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const updatedData = req.body;
@@ -142,7 +128,8 @@ app.patch("/pets/:id", verifyToken, async (req, res) => {
   }
 });
 
-app.delete("/pets/:id", verifyToken, async (req, res) => {
+// DELETE pet
+app.delete("/pets/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const result = await petsCollection.deleteOne({
@@ -158,7 +145,8 @@ app.delete("/pets/:id", verifyToken, async (req, res) => {
 // REQUESTS ROUTES
 // ──────────────────────────────────────
 
-app.get("/requests/user/:userId", verifyToken, async (req, res) => {
+// GET requests by userId
+app.get("/requests/user/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
     const result = await requestsCollection
@@ -170,7 +158,8 @@ app.get("/requests/user/:userId", verifyToken, async (req, res) => {
   }
 });
 
-app.get("/requests/pet/:petId", verifyToken, async (req, res) => {
+// GET requests by petId
+app.get("/requests/pet/:petId", async (req, res) => {
   try {
     const { petId } = req.params;
     const result = await requestsCollection
@@ -182,7 +171,8 @@ app.get("/requests/pet/:petId", verifyToken, async (req, res) => {
   }
 });
 
-app.post("/requests", verifyToken, async (req, res) => {
+// POST submit request
+app.post("/requests", async (req, res) => {
   try {
     const requestData = req.body;
     requestData.status = "pending";
@@ -194,7 +184,8 @@ app.post("/requests", verifyToken, async (req, res) => {
   }
 });
 
-app.patch("/requests/:id/approve", verifyToken, async (req, res) => {
+// PATCH approve request
+app.patch("/requests/:id/approve", async (req, res) => {
   try {
     const { id } = req.params;
     const { petId } = req.body;
@@ -220,7 +211,8 @@ app.patch("/requests/:id/approve", verifyToken, async (req, res) => {
   }
 });
 
-app.patch("/requests/:id/reject", verifyToken, async (req, res) => {
+// PATCH reject request
+app.patch("/requests/:id/reject", async (req, res) => {
   try {
     const { id } = req.params;
     const result = await requestsCollection.updateOne(
@@ -233,7 +225,8 @@ app.patch("/requests/:id/reject", verifyToken, async (req, res) => {
   }
 });
 
-app.delete("/requests/:id", verifyToken, async (req, res) => {
+// DELETE cancel request
+app.delete("/requests/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const result = await requestsCollection.deleteOne({
@@ -245,6 +238,7 @@ app.delete("/requests/:id", verifyToken, async (req, res) => {
   }
 });
 
+// Root route
 app.get("/", (req, res) => {
   res.send("Pet Adoption Server is running!");
 });
