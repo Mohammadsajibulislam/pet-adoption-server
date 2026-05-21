@@ -231,7 +231,7 @@ app.post("/pets", async (req, res) => {
 });
 
 // PATCH update pet
-app.patch("/pets/:id", async (req, res) => {
+app.patch("/pets/:id",async (req, res) => {
   try {
     const { id } = req.params;
     const updatedData = req.body;
@@ -270,7 +270,7 @@ app.patch("/pets/:id", async (req, res) => {
 });
 
 // DELETE pet
-app.delete("/pets/:id", async (req, res) => {
+app.delete("/pets/:id",async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -322,7 +322,7 @@ app.get("/requests/user/:userId", async (req, res) => {
 });
 
 // GET requests by petId
-app.get("/requests/pet/:petId", async (req, res) => {
+app.get("/requests/pet/:petId",async (req, res) => {
   try {
     const { petId } = req.params;
     if (!isValidObjectId(petId)) {
@@ -343,11 +343,11 @@ app.get("/requests/pet/:petId", async (req, res) => {
 });
 
 // POST submit request
-app.post("/requests", async (req, res) => {
+app.post("/requests",async (req, res) => {
   try {
     const requestData = req.body;
 
-    // Validate input
+    // Validate inputz
     const validationErrors = validateRequestData(requestData);
     if (validationErrors.length > 0) {
       return res.status(400).json({ 
@@ -395,7 +395,7 @@ app.post("/requests", async (req, res) => {
 });
 
 // PATCH approve request
-app.patch("/requests/:id/approve", async (req, res) => {
+app.patch("/requests/:id/approve",async (req, res) => {
   try {
     const { id } = req.params;
     const { petId } = req.body;
@@ -444,7 +444,7 @@ app.patch("/requests/:id/approve", async (req, res) => {
 });
 
 // PATCH reject request
-app.patch("/requests/:id/reject", async (req, res) => {
+app.patch("/requests/:id/reject",async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -472,7 +472,7 @@ app.patch("/requests/:id/reject", async (req, res) => {
 });
 
 // DELETE cancel request
-app.delete("/requests/:id", async (req, res) => {
+app.delete("/requests/:id",async (req, res) => {
   try {
     const { id } = req.params;
 
