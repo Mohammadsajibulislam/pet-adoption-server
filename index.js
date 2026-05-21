@@ -18,6 +18,8 @@ app.use(
     origin: [
       "http://localhost:3000",
       "https://pet-adoption-client-seven.vercel.app",
+      "https://pet-adoption-client-iwg208hk6.vercel.app",
+      /https:\/\/pet-adoption-client.*\.vercel\.app$/,
     ],
     credentials: true,
   })
