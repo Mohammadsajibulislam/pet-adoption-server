@@ -204,13 +204,13 @@ app.post("/pets", async (req, res) => {
     const petData = req.body;
     
     // Validate input
-    const validationErrors = validatePetData(petData);
-    if (validationErrors.length > 0) {
-      return res.status(400).json({ 
-        message: "Validation error",
-        errors: validationErrors 
-      });
-    }
+    // const validationErrors = validatePetData(petData);
+    // if (validationErrors.length > 0) {
+    //   return res.status(400).json({ 
+    //     message: "Validation error",
+    //     errors: validationErrors 
+    //   });
+    // }
 
     petData.status = "available";
     petData.createdAt = new Date();
