@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 
 dotenv.config();
 
@@ -42,10 +43,36 @@ client
   });
 
 // ──────────────────────────────────────
+// JWT MIDDLEWARE
+// ──────────────────────────────────────
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+);
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req?.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = payload;
+    next();
+  } catch (error) {
+    console.error("Token verify error:", error.message);
+    return res.status(403).json({ message: "Forbidden" });
+  }
+};
+
+// ──────────────────────────────────────
 // VALIDATION & HELPER FUNCTIONS
 // ──────────────────────────────────────
 
-// Validate ObjectId
 const isValidObjectId = (id) => {
   try {
     return ObjectId.isValid(id) && String(new ObjectId(id)) === id;
@@ -54,43 +81,11 @@ const isValidObjectId = (id) => {
   }
 };
 
-// Validate email format
 const isValidEmail = (email) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 };
 
-// Validate pet data
-const validatePetData = (data) => {
-  const errors = [];
-  if (!data.name || typeof data.name !== "string" || data.name.trim() === "") {
-    errors.push("Pet name is required and must be a non-empty string");
-  }
-  if (!data.species || typeof data.species !== "string") {
-    errors.push("Species is required");
-  }
-  if (!data.breed || typeof data.breed !== "string") {
-    errors.push("Breed is required");
-  }
-  if (data.age === undefined || data.age === null || data.age === "") {
-    errors.push("Age is required");
-  }
-  if (!data.gender || typeof data.gender !== "string") {
-    errors.push("Gender is required");
-  }
-  if (!data.image || typeof data.image !== "string") {
-    errors.push("Image URL is required");
-  }
-  if (!data.ownerEmail || !isValidEmail(data.ownerEmail)) {
-    errors.push("Valid owner email is required");
-  }
-  if (data.adoptionFee === undefined || data.adoptionFee === null) {
-    errors.push("Adoption fee is required");
-  }
-  return errors;
-};
-
-// Validate adoption request data
 const validateRequestData = (data) => {
   const errors = [];
   if (!data.petId || !isValidObjectId(data.petId)) {
@@ -115,7 +110,7 @@ const validateRequestData = (data) => {
 // PETS ROUTES
 // ──────────────────────────────────────
 
-// GET all pets (search & filter)
+// GET all pets (search & filter) — public
 app.get("/pets", async (req, res) => {
   try {
     const { search, species } = req.query;
@@ -130,14 +125,11 @@ app.get("/pets", async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("Error fetching pets:", error);
-    res.status(500).json({ 
-      message: "Failed to fetch pets", 
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to fetch pets" });
   }
 });
 
-// GET featured pets
+// GET featured pets — public
 app.get("/pets/featured", async (req, res) => {
   try {
     const result = await petsCollection
@@ -148,14 +140,11 @@ app.get("/pets/featured", async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("Error fetching featured pets:", error);
-    res.status(500).json({ 
-      message: "Failed to fetch featured pets",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to fetch featured pets" });
   }
 });
 
-// GET pets by owner email
+// GET pets by owner email — public
 app.get("/pets/owner/:email", async (req, res) => {
   try {
     const { email } = req.params;
@@ -168,14 +157,11 @@ app.get("/pets/owner/:email", async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("Error fetching owner pets:", error);
-    res.status(500).json({ 
-      message: "Failed to fetch pets",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to fetch pets" });
   }
 });
 
-// GET single pet
+// GET single pet — public
 app.get("/pets/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -191,108 +177,74 @@ app.get("/pets/:id", async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("Error fetching pet:", error);
-    res.status(500).json({ 
-      message: "Failed to fetch pet details",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to fetch pet details" });
   }
 });
 
-// POST add pet
-app.post("/pets", async (req, res) => {
+// POST add pet — protected
+app.post("/pets", verifyToken, async (req, res) => {
   try {
     const petData = req.body;
-    
-    // Validate input
-    // const validationErrors = validatePetData(petData);
-    // if (validationErrors.length > 0) {
-    //   return res.status(400).json({ 
-    //     message: "Validation error",
-    //     errors: validationErrors 
-    //   });
-    // }
-
     petData.status = "available";
     petData.createdAt = new Date();
     petData.updatedAt = new Date();
-    
     const result = await petsCollection.insertOne(petData);
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Pet added successfully",
-      id: result.insertedId 
+      id: result.insertedId,
     });
   } catch (error) {
     console.error("Error adding pet:", error);
-    res.status(500).json({ 
-      message: "Failed to add pet",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to add pet" });
   }
 });
 
-// PATCH update pet
-app.patch("/pets/:id",async (req, res) => {
+// PATCH update pet — protected
+app.patch("/pets/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const updatedData = req.body;
-
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid pet ID format" });
     }
-
-    // Don't allow changing status or ownership
     delete updatedData.status;
     delete updatedData.ownerEmail;
     delete updatedData.createdAt;
-
     updatedData.updatedAt = new Date();
-
     const result = await petsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $set: updatedData }
     );
-
     if (result.matchedCount === 0) {
       return res.status(404).json({ message: "Pet not found" });
     }
-
-    res.json({ 
+    res.json({
       message: "Pet updated successfully",
-      modifiedCount: result.modifiedCount 
+      modifiedCount: result.modifiedCount,
     });
   } catch (error) {
     console.error("Error updating pet:", error);
-    res.status(500).json({ 
-      message: "Failed to update pet",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to update pet" });
   }
 });
 
-// DELETE pet
-app.delete("/pets/:id",async (req, res) => {
+// DELETE pet — protected
+app.delete("/pets/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid pet ID format" });
     }
-
     const result = await petsCollection.deleteOne({
       _id: new ObjectId(id),
     });
-
     if (result.deletedCount === 0) {
       return res.status(404).json({ message: "Pet not found" });
     }
-
     res.json({ message: "Pet deleted successfully" });
   } catch (error) {
     console.error("Error deleting pet:", error);
-    res.status(500).json({ 
-      message: "Failed to delete pet",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to delete pet" });
   }
 });
 
@@ -300,8 +252,8 @@ app.delete("/pets/:id",async (req, res) => {
 // REQUESTS ROUTES
 // ──────────────────────────────────────
 
-// GET requests by userId
-app.get("/requests/user/:userId", async (req, res) => {
+// GET requests by userId — protected
+app.get("/requests/user/:userId", verifyToken, async (req, res) => {
   try {
     const { userId } = req.params;
     if (!userId || typeof userId !== "string") {
@@ -314,15 +266,12 @@ app.get("/requests/user/:userId", async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("Error fetching user requests:", error);
-    res.status(500).json({ 
-      message: "Failed to fetch requests",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to fetch requests" });
   }
 });
 
-// GET requests by petId
-app.get("/requests/pet/:petId",async (req, res) => {
+// GET requests by petId — protected
+app.get("/requests/pet/:petId", verifyToken, async (req, res) => {
   try {
     const { petId } = req.params;
     if (!isValidObjectId(petId)) {
@@ -335,28 +284,23 @@ app.get("/requests/pet/:petId",async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error("Error fetching pet requests:", error);
-    res.status(500).json({ 
-      message: "Failed to fetch requests",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to fetch requests" });
   }
 });
 
-// POST submit request
-app.post("/requests",async (req, res) => {
+// POST submit request — protected
+app.post("/requests", verifyToken, async (req, res) => {
   try {
     const requestData = req.body;
 
-    // Validate inputz
     const validationErrors = validateRequestData(requestData);
     if (validationErrors.length > 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: "Validation error",
-        errors: validationErrors 
+        errors: validationErrors,
       });
     }
 
-    // Check if pet exists
     const petExists = await petsCollection.findOne({
       _id: new ObjectId(requestData.petId),
     });
@@ -364,15 +308,14 @@ app.post("/requests",async (req, res) => {
       return res.status(404).json({ message: "Pet not found" });
     }
 
-    // Check if already requested by this user
     const existingRequest = await requestsCollection.findOne({
       petId: requestData.petId,
       userId: requestData.userId,
       status: { $in: ["pending", "approved"] },
     });
     if (existingRequest) {
-      return res.status(409).json({ 
-        message: "You have already requested this pet" 
+      return res.status(409).json({
+        message: "You have already requested this pet",
       });
     }
 
@@ -381,21 +324,18 @@ app.post("/requests",async (req, res) => {
     requestData.updatedAt = new Date();
 
     const result = await requestsCollection.insertOne(requestData);
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Adoption request submitted successfully",
-      id: result.insertedId 
+      id: result.insertedId,
     });
   } catch (error) {
     console.error("Error submitting request:", error);
-    res.status(500).json({ 
-      message: "Failed to submit adoption request",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to submit adoption request" });
   }
 });
 
-// PATCH approve request
-app.patch("/requests/:id/approve",async (req, res) => {
+// PATCH approve request — protected
+app.patch("/requests/:id/approve", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { petId } = req.body;
@@ -407,7 +347,6 @@ app.patch("/requests/:id/approve",async (req, res) => {
       return res.status(400).json({ message: "Invalid pet ID format" });
     }
 
-    // Check if request exists
     const requestExists = await requestsCollection.findOne({
       _id: new ObjectId(id),
     });
@@ -415,19 +354,16 @@ app.patch("/requests/:id/approve",async (req, res) => {
       return res.status(404).json({ message: "Request not found" });
     }
 
-    // Update the approved request
     await requestsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $set: { status: "approved", updatedAt: new Date() } }
     );
 
-    // Reject other requests for the same pet
     await requestsCollection.updateMany(
       { petId, _id: { $ne: new ObjectId(id) } },
       { $set: { status: "rejected", updatedAt: new Date() } }
     );
 
-    // Mark pet as adopted
     await petsCollection.updateOne(
       { _id: new ObjectId(petId) },
       { $set: { status: "adopted", updatedAt: new Date() } }
@@ -436,65 +372,48 @@ app.patch("/requests/:id/approve",async (req, res) => {
     res.json({ message: "Adoption request approved successfully" });
   } catch (error) {
     console.error("Error approving request:", error);
-    res.status(500).json({ 
-      message: "Failed to approve request",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to approve request" });
   }
 });
 
-// PATCH reject request
-app.patch("/requests/:id/reject",async (req, res) => {
+// PATCH reject request — protected
+app.patch("/requests/:id/reject", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid request ID format" });
     }
-
     const result = await requestsCollection.updateOne(
       { _id: new ObjectId(id) },
       { $set: { status: "rejected", updatedAt: new Date() } }
     );
-
     if (result.matchedCount === 0) {
       return res.status(404).json({ message: "Request not found" });
     }
-
     res.json({ message: "Adoption request rejected successfully" });
   } catch (error) {
     console.error("Error rejecting request:", error);
-    res.status(500).json({ 
-      message: "Failed to reject request",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to reject request" });
   }
 });
 
-// DELETE cancel request
-app.delete("/requests/:id",async (req, res) => {
+// DELETE cancel request — protected
+app.delete("/requests/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-
     if (!isValidObjectId(id)) {
       return res.status(400).json({ message: "Invalid request ID format" });
     }
-
     const result = await requestsCollection.deleteOne({
       _id: new ObjectId(id),
     });
-
     if (result.deletedCount === 0) {
       return res.status(404).json({ message: "Request not found" });
     }
-
     res.json({ message: "Adoption request cancelled successfully" });
   } catch (error) {
     console.error("Error cancelling request:", error);
-    res.status(500).json({ 
-      message: "Failed to cancel request",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined 
-    });
+    res.status(500).json({ message: "Failed to cancel request" });
   }
 });
 
